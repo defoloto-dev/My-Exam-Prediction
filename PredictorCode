@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Klausur-Bestehens-Rechner (Bayes + Simulation)</title>
+<style>
+  body{font-family:Inter,system-ui,Arial,sans-serif;margin:18px;color:#111;line-height:1.4}
+  h1{font-size:20px;margin-bottom:6px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:12px}
+  label{display:block;font-size:13px;margin-bottom:4px}
+  input[type="number"], select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+  .btn{display:inline-block;padding:8px 12px;border-radius:8px;background:#2563eb;color:#fff;border:0;cursor:pointer}
+  .card{border:1px solid #e6e6e6;padding:12px;border-radius:8px;background:#fff}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}
+  .muted{color:#666;font-size:13px}
+  .small{font-size:13px}
+  .result{margin-top:10px}
+  .row{display:flex;gap:8px;align-items:center}
+  .note{background:#fffbe6;border:1px solid #ffea9e;padding:8px;border-radius:6px;margin-top:8px}
+</style>
+</head>
+<body>
+  <h1>Klausur-Bestehens-Rechner (Bayes)</h1>
+  <p class="muted">Gib die Ergebnisse deiner 3 Altklausuren an (als %-Treffer). Das Tool schätzt dein Netto-Wissen (Zufall entfernt), berechnet die Besteh-Wahrscheinlichkeit und schätzt, wie viel Lernzeit du noch brauchst, um ein Ziel-Bestehenswahrscheinlichkeit zu erreichen.</p>
+
+  <div class="card">
+    <h3>Eingaben — Altklausuren & Prüfungsparameter</h3>
+    <div class="grid">
+      <div>
+        <label>Altklausur 1 (% Treffer)</label>
+        <input id="alt1" type="number" min="0" max="100" step="0.1" value="60">
+      </div>
+      <div>
+        <label>Altklausur 2 (% Treffer)</label>
+        <input id="alt2" type="number" min="0" max="100" step="0.1" value="60">
+      </div>
+      <div>
+        <label>Altklausur 3 (% Treffer)</label>
+        <input id="alt3" type="number" min="0" max="100" step="0.1" value="60">
+      </div>
+      <div>
+        <label>Anzahl Fragen pro Prüfung</label>
+        <input id="nQuestions" type="number" min="1" step="1" value="60">
+      </div>
+      <div>
+        <label>Antwortoptionen pro Frage</label>
+        <input id="choices" type="number" min="2" step="1" value="5">
+      </div>
+      <div>
+        <label>Bestehensgrenze (Prozent)</label>
+        <input id="passPercent" type="number" min="0" max="100" step="0.1" value="60">
+      </div>
+    </div>
+
+    <h4>Wie soll der Nervositäts-Abzug angewendet werden?</h4>
+    <div class="grid">
+      <div>
+        <label>Abzugsgröße (Prozentpunkte)</label>
+        <input id="nervousPP" type="number" min="0" step="0.1" value="8">
+      </div>
+      <div>
+        <label>Abzug angewendet auf</label>
+        <select id="nervousMode">
+          <option value="alt_before">Alt-Quote (vor Bayes) — strenger</option>
+          <option value="final_after">Endwahrscheinlichkeit (nachher)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <button id="calcBtn" class="btn">Berechnen</button>
+    </div>
+
+    <div id="out" class="result"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3>Zusätzliche Lernzeit-Schätzung</h3>
+    <div class="grid">
+      <div>
+        <label>Bisherige Lernzeit (Stunden)</label>
+        <input id="hoursDone" type="number" min="0" step="0.1" value="40">
+      </div>
+      <div>
+        <label>Ziel Bestehenswahrscheinlichkeit (%)</label>
+        <input id="targetPassPct" type="number" min="0" max="100" step="0.1" value="80">
+      </div>
+      <div>
+        <label>Lern-Effizienz: Stunden pro +0.1 Netto-Wissen</label>
+        <input id="hoursPer10Pct" type="number" min="0.1" step="0.1" value="20">
+        <div class="muted small">z. B. 20 h für +0.1 Netto-Wissen (user-definiert)</div>
+      </div>
+    </div>
+    <div style="margin-top:8px">
+      <button id="calcTimeBtn" class="btn">Benötigte Lernzeit berechnen</button>
+    </div>
+    <div id="timeOut" class="result"></div>
+    <div class="note">
+      <strong>Hinweis:</strong> Die Lern-Effizienz ist ein frei wählbarer Parameter. Ohne reale Messung ist das eine Schätzung — je konservativer (größere Stunden pro +0.1), desto mehr Puffer.
+    </div>
+  </div>
+
+  <script>
+  // --- Hilfsfunktionen ---
+  function clamp(x,min=0,max=1){ return Math.max(min, Math.min(max,x)); }
+
+  // Berechnet Bayes-Netto-Wissen k (0..1) aus beobachteter Alt-Quote h (0..1)
+  // Beta(1,1) prior, n_eff = nQuestions * 3 (Mittel über 3 Prüfungen)
+  function bayesNetKnowledge(h, nQuestions, choices){
+    var n_eff = nQuestions * 3;
+    var a = 1, b = 1;
+    var x = h * n_eff;
+    var s_post = (x + a) / (n_eff + a + b);
+    var rand_level = 1/choices;
+    var k = (s_post - rand_level) / (1 - rand_level);
+    return clamp(k, 0, 1);
+  }
+
+  // Berechne Binomial-Oberwahrscheinlichkeit P[X >= need] mit numerischer Stabilität
+  function binomTail(n, p, need){
+    need = Math.max(0, Math.min(n, Math.ceil(need)));
+    // Start bei i=0: pmf0 = (1-p)^n
+    var q = 1 - p;
+    // Handle edge cases
+    if (p <= 0) return need <= 0 ? 1.0 : 0.0;
+    if (p >= 1) return need <= n ? 1.0 : 0.0;
+    var pmf0 = Math.pow(q, n);
+    var pmf = pmf0;
+    var total = 0;
+    // Sum i=0..need-1 then return 1 - sum
+    var sumLower = 0;
+    for (var i=0; i<need; i++){
+      sumLower += pmf;
+      // recurrence to next pmf
+      pmf = pmf * (n - i) / (i + 1) * (p / q);
+    }
+    var res = Math.max(0, 1 - sumLower);
+    return clamp(res, 0, 1);
+  }
+
+  // pass probability from k
+  function passProbFromK(k, nQuestions, choices, passPercent){
+    var rand_level = 1/choices;
+    var p = rand_level + (1 - rand_level) * k;
+    var need = Math.ceil(passPercent/100 * nQuestions);
+    return binomTail(nQuestions, p, need);
+  }
+
+  // invert: find minimal k in [0,1] such that passProbFromK(k) >= target (bisection)
+  function findKforTargetPass(targetProb, nQuestions, choices, passPercent){
+    var lo = 0, hi = 1;
+    for (var iter=0; iter<40; iter++){
+      var mid = (lo+hi)/2;
+      var prob = passProbFromK(mid, nQuestions, choices, passPercent);
+      if (prob >= targetProb) hi = mid; else lo = mid;
+    }
+    return hi;
+  }
+
+  // Helper: format percent
+  function fmt(x){ return (x*100).toFixed(2) + " %"; }
+
+  // --- UI logic ---
+  document.getElementById('calcBtn').addEventListener('click', function(){
+    var a1 = parseFloat(document.getElementById('alt1').value) || 0;
+    var a2 = parseFloat(document.getElementById('alt2').value) || 0;
+    var a3 = parseFloat(document.getElementById('alt3').value) || 0;
+    var nQ = parseInt(document.getElementById('nQuestions').value) || 60;
+    var choices = parseInt(document.getElementById('choices').value) || 5;
+    var passPercent = parseFloat(document.getElementById('passPercent').value) || 60;
+    var nervPP = parseFloat(document.getElementById('nervousPP').value) || 0;
+    var nervMode = document.getElementById('nervousMode').value;
+
+    // observed mean alt-quote (0..1)
+    var meanAlt = (a1 + a2 + a3) / 3.0 / 100.0;
+    // naked/pass prob
+    var k_current = bayesNetKnowledge(meanAlt, nQ, choices);
+    var passNaked = passProbFromK(k_current, nQ, choices, passPercent);
+
+    var passRealistic = passNaked;
+    var k_after_nerv = k_current;
+    // Two modes:
+    if (nervMode === 'alt_before'){
+      // apply nerv PP to alt-quote first, then recalc Bayes -> stricter
+      var meanAltAdj = clamp(meanAlt - (nervPP/100));
+      k_after_nerv = bayesNetKnowledge(meanAltAdj, nQ, choices);
+      passRealistic = passProbFromK(k_after_nerv, nQ, choices, passPercent);
+    } else {
+      // apply nerv PP to final probability
+      passRealistic = clamp(passNaked - (nervPP/100));
+    }
+
+    // grade probabilities
+    var grade70 = passProbFromK(findKforTargetPass(0, nQ, choices, 70 /* placeholder */), nQ, choices, 70);
+    // But better: compute using current k
+    var prob_ge_70 = passProbFromK(k_current, nQ, choices, 70);
+    var prob_ge_80 = passProbFromK(k_current, nQ, choices, 80);
+    var prob_ge_90 = passProbFromK(k_current, nQ, choices, 90);
+
+    // present results
+    var out = document.getElementById('out');
+    out.innerHTML = '';
+    var html = '';
+    html += '<div class="row"><div style="flex:1"><strong>Beobachtete Alt-Quote (Mittel):</strong> ' + (meanAlt*100).toFixed(2) + ' %</div>';
+    html += '<div style="flex:1"><strong>Netto-Wissen (Bayes):</strong> ' + (k_current*100).toFixed(2) + ' %</div></div>';
+    html += '<div class="row" style="margin-top:8px"><div style="flex:1"><strong>Besteh-Wahrscheinlichkeit (nackt):</strong> ' + (passNaked*100).toFixed(2) + ' %</div>';
+    html += '<div style="flex:1"><strong>Realistische Besteh-Chance:</strong> ' + (passRealistic*100).toFixed(2) + ' %</div></div>';
+
+    html += '<div style="margin-top:8px"><strong>Noten-Wahrscheinlichkeiten (aktuell, Basierend auf Netto-Wissen):</strong>';
+    html += '<table><thead><tr><th>Schwelle</th><th>Wahrscheinlichkeit</th></tr></thead><tbody>';
+    html += '<tr><td>≥ 70 % (Note ≈ 3.0)</td><td>' + (prob_ge_70*100).toFixed(2) + ' %</td></tr>';
+    html += '<tr><td>≥ 80 % (Note ≈ 2.0)</td><td>' + (prob_ge_80*100).toFixed(2) + ' %</td></tr>';
+    html += '<tr><td>≥ 90 % (Note ≈ 1.0)</td><td>' + (prob_ge_90*100).toFixed(2) + ' %</td></tr>';
+    html += '</tbody></table></div>';
+
+    html += '<div class="muted small" style="margin-top:8px">Annahmen: Beta(1,1) Prior; wir werten die 3 Altklausuren als zusammen n_eff = nQuestions × 3 Beobachtungen.</div>';
+
+    out.innerHTML = html;
+  });
+
+  document.getElementById('calcTimeBtn').addEventListener('click', function(){
+    // Read same inputs needed to compute current k
+    var a1 = parseFloat(document.getElementById('alt1').value) || 0;
+    var a2 = parseFloat(document.getElementById('alt2').value) || 0;
+    var a3 = parseFloat(document.getElementById('alt3').value) || 0;
+    var nQ = parseInt(document.getElementById('nQuestions').value) || 60;
+    var choices = parseInt(document.getElementById('choices').value) || 5;
+    var passPercent = parseFloat(document.getElementById('passPercent').value) || 60;
+
+    var meanAlt = (a1 + a2 + a3) / 3.0 / 100.0;
+    var k_current = bayesNetKnowledge(meanAlt, nQ, choices);
+
+    var hoursDone = parseFloat(document.getElementById('hoursDone').value) || 0;
+    var targetPassPct = (parseFloat(document.getElementById('targetPassPct').value) || 80) / 100.0;
+    var hoursPer10 = parseFloat(document.getElementById('hoursPer10Pct').value) || 20;
+
+    // find required k to reach targetPassPct (we'll use binary search on k)
+    var k_needed = findKforTargetPass(targetPassPct, nQ, choices, passPercent);
+
+    var delta_k = k_needed - k_current;
+    if (delta_k <= 0){
+      document.getElementById('timeOut').innerHTML = '<div><strong>Kein zusätzliches Lernen nötig:</strong> Du erreichst das Ziel bereits mit der aktuellen Schätzung.</div>';
+      return;
+    }
+    // hoursPer10 is hours needed per +0.1 net-knowledge
+    var hours_needed = delta_k * (hoursPer10 * 10.0); // because hoursPer10 * (delta_k / 0.1) = delta_k * hoursPer10 *10
+
+    // show results
+    var msg = '';
+    msg += '<div><strong>Aktuelles Netto-Wissen (k):</strong> ' + (k_current*100).toFixed(2) + ' %</div>';
+    msg += '<div><strong>Benötigtes Netto-Wissen (k) für Ziel ' + (targetPassPct*100).toFixed(1) + '%:</strong> ' + (k_needed*100).toFixed(2) + ' %</div>';
+    msg += '<div style="margin-top:6px"><strong>Delta k:</strong> ' + (delta_k*100).toFixed(2) + ' %-Punkte</div>';
+    msg += '<div style="margin-top:6px"><strong>Geschätzte zusätzliche Lernzeit:</strong> ' + hours_needed.toFixed(1) + ' Stunden</div>';
+    msg += '<div class="muted small" style="margin-top:6px">Rechenweise: Lern-Effizienz ist Benutzer-definiert: <em>Stunden pro +0.1 Netto-Wissen</em>. Wenn du z. B. 20 h/0.1 einstellst, bedeuten +0.1 k ≈ 20 Stunden.</div>';
+
+    document.getElementById('timeOut').innerHTML = msg;
+  });
+
+  // optional: calculate initially to show defaults
+  document.getElementById('calcBtn').click();
+
+  </script>
+</body>
+</html>
