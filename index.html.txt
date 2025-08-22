@@ -1,0 +1,730 @@
+
+
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Typing Practice — Adaptive ( Coins & Levels)</title>
+
+  <style>
+    :root{
+      --bg:#f6f8fb; 
+      --card:#ffffff; 
+      --accent:#1976d2; 
+      --muted:#6b7280;
+      --border:#e6e9ef;
+      --text:#111111;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    body{
+      background:var(--bg);
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:32px;
+    }
+
+    .app{
+      width:960px;
+      max-width:96%;
+      background:var(--card);
+      border-radius:12px;
+      padding:22px;
+      box-shadow:0 8px 24px rgba(20,20,40,0.08);
+    }
+
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:14px;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+
+    h1{
+      font-size:18px;
+      margin:0;
+      color:var(--text);
+    }
+
+    .controls{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    label{
+      font-size:13px;
+      color:var(--muted);
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    input[type="number"]{
+      width:88px;
+      padding:6px 8px;
+      border-radius:6px;
+      border:1px solid var(--border);
+      color:var(--text);
+      background:#fff;
+    }
+
+    /* Gut lesbare Buttons: dunkler Text auf hell, außer #start */
+    button{
+      background:var(--card);
+      color:var(--text);
+      border:1px solid var(--border);
+      padding:8px 12px;
+      border-radius:8px;
+      cursor:pointer;
+      transition:background .15s ease, transform .02s ease;
+      user-select:none;
+    }
+    button:hover{ background:#f0f2f6; }
+    button:active{ transform:translateY(1px); }
+
+    /* Prominenter Start-Button */
+    #start{
+      background:var(--accent);
+      color:#ffffff;
+      border:none;
+    }
+    #start:hover{ filter:brightness(0.95); }
+
+    .btn-ghost{
+      background:transparent;
+      border:1px solid var(--border);
+    }
+
+    .display{
+      background:#f8fafc;
+      border-radius:8px;
+      padding:20px;
+      min-height:120px;
+      font-size:22px;
+      line-height:1.6;
+      font-family:monospace;
+      color:#111;
+      white-space:normal;
+      word-wrap:break-word;
+      overflow:hidden;
+      outline:none;
+    }
+
+    .display .char{ white-space:pre; }
+
+    .char.correct{ color:#03894c; }
+    .char.incorrect{ color:#d32f2f; background:rgba(211,47,47,0.06); }
+    
+    /* Level- und Multiplikatoranzeige in Rot */
+    #level.value, #multiplierDisplay.value {
+      color: #d32f2f;
+    }
+    
+    .char.current{
+      text-decoration:underline;
+      text-decoration-color:var(--accent);
+      text-decoration-thickness:2px;
+    }
+
+    .stats{
+      display:flex;
+      gap:18px;
+      margin-top:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .stat{ font-size:14px; color:var(--muted); }
+    .value{ color:var(--text); font-weight:600; }
+
+    .bad-list{ margin-left:auto; font-size:13px; color:var(--muted); }
+
+    footer{
+      margin-top:16px;
+      font-size:13px;
+      color:var(--muted);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+
+    .small{ font-size:12px; color:var(--muted); }
+
+    @media (max-width:640px){
+      .display{ font-size:18px; }
+    }
+
+    /* Einfache Modal-Styles (für hübscheres Popup statt alert) */
+    .modal-backdrop{
+      position:fixed; inset:0; 
+      background:rgba(0,0,0,0.35);
+      display:none; align-items:center; justify-content:center;
+      padding:20px;
+      z-index:50;
+    }
+    .modal{
+      background:#fff; border-radius:10px; max-width:720px; width:100%;
+      box-shadow:0 20px 60px rgba(0,0,0,0.16); overflow:hidden;
+      display:flex; flex-direction:column;
+    }
+    .modal header{ padding:14px 16px; border-bottom:1px solid var(--border); }
+    .modal header h2{ margin:0; font-size:16px; color:var(--text); }
+    .modal .content{ padding:16px; max-height:60vh; overflow:auto; }
+    .modal .actions{ padding:12px 16px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+    .table{
+      width:100%; border-collapse:collapse; font-size:13px; color:#222;
+    }
+    .table th, .table td{ border-bottom:1px solid #eceff5; padding:8px 6px; text-align:left; }
+    .badge{
+      display:inline-block; padding:2px 6px; border-radius:999px; border:1px solid var(--border); font-size:12px;
+    }
+    .mono{ font-family:monospace; }
+  </style>
+</head>
+<body>
+  <div class="app" role="main">
+
+    <header>
+      <h1>Typing Practice — adaptive </h1>
+
+      <div class="controls" aria-hidden="false">
+        <label>
+          Länge (Zeichen, max. 40)
+          <input id="len" type="number" value="40" min="10" max="40" />
+        </label>
+
+        <button id="start">Start</button>
+        <button id="stop" class="btn-ghost">Stop</button>
+
+        <button id="showScores" class="btn-ghost">Alle Scores</button>
+        <button id="showLevels" class="btn-ghost">Level-Liste</button>
+        <button id="shop" class="btn-ghost">Coin-Shop</button>
+
+        <button id="resetStats" class="btn-ghost">Stats zurücksetzen</button>
+      </div>
+    </header>
+
+    <div id="display" class="display" tabindex="0" aria-label="Übungstext"></div>
+
+    <div class="stats">
+      <div class="stat">WPM: <strong id="wpm" class="value">0</strong></div>
+      <div class="stat">Accuracy: <strong id="acc" class="value">100%</strong></div>
+      <div class="stat">Zeit: <strong id="time" class="value">0s</strong></div>
+      <div class="stat">Coins: <strong id="coins" class="value">0</strong></div>
+      <div class="stat">Level: <strong id="level" class="value">—</strong></div>
+      <div class="stat" style="margin-left: auto;">Multiplier: <strong id="multiplierDisplay" class="value">x1</strong></div>
+    </div>
+
+    <footer>
+      <div class="small">
+        Tippe den Text. Backspace erlaubt Korrekturen.
+        Coins können im Shop in Multiplikatoren investiert werden.
+      </div>
+      <div>
+        <button id="downloadReport" class="btn-ghost">Bericht (.json)</button>
+      </div>
+    </footer>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" role="document">
+      <header><h2 id="modalTitle">Übersicht</h2></header>
+      <div id="modalContent" class="content"></div>
+      <div class="actions">
+        <button id="modalClose">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /*
+      ================================================================================
+      Persistenz & Utilities
+      ================================================================================
+    */
+    const STORAGE_KEY = 'typing_adapt_stats_v3'; // neue Version, um alte Strukturen nicht zu clashen
+
+    function loadStats(){
+      try{
+        const stats = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+        return {
+          sessions: stats.sessions || [],
+          coins: stats.coins || 0,
+          multiplier: stats.multiplier || 1
+        };
+      }catch(e){
+        return { sessions:[], coins:0, multiplier:1 };
+      }
+    }
+
+    function saveStats(stats){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+    }
+
+    function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+    
+    function formatNumber(num) {
+      return new Intl.NumberFormat('de-DE').format(num);
+    }
+
+    /*
+      ================================================================================
+      NEUES Level-Mapping
+      ================================================================================
+    */
+    function getLevel(wpm){
+      if (wpm < 10) return "faultier";
+      if (wpm < 15) return "schildkröte";
+      if (wpm < 20) return "DIggaMici";
+      if (wpm < 23) return "Rückschritt ist kein Fortschritt";
+      if (wpm < 30) return "schlechter Beginner Luke";
+      if (wpm < 35) return "Expert Beginner Luke";
+      if (wpm < 40) return "Actual Average Dude";
+      if (wpm < 60) return "Very Nerdy Expert";
+      if (wpm < 80) return "LEGEND Expert";
+      if (wpm < 120) return "Genius";
+      if (wpm < 200) return "Über-Genius";
+      if (wpm < 400) return "Galactic Typist";
+      if (wpm < 1000) return "Keyboard-Demigod";
+      if (wpm < 5000) return "Quantum Finger";
+      if (wpm < 10000) return "Typo Singularity";
+      if (wpm < 100000) return "Omega Being";
+      return "The Final Key";
+    }
+
+    function getAllLevels(){
+      return [
+        { level: "Normale Level", isHeader: true },
+        { label: "faultier", range: "< 10 WPM" },
+        { label: "schildkröte", range: "< 15 WPM" },
+        { label: "DIggaMici", range: "< 20 WPM" },
+        { label: "Rückschritt ist kein Fortschritt", range: "< 23 WPM" },
+        { label: "schlechter Beginner Luke", range: "< 30 WPM" },
+        { label: "Expert Beginner Luke", range: "< 35 WPM" },
+        { label: "Actual Average Dude", range: "< 40 WPM" },
+        { label: "Very Nerdy Expert", range: "< 60 WPM" },
+        { label: "LEGEND Expert", range: "< 80 WPM" },
+        { label: "Genius", range: "< 120 WPM" },
+        { level: "Surreale Level", isHeader: true, style: "margin-top: 1em;" },
+        { label: "Über-Genius", range: "< 200 WPM" },
+        { label: "Galactic Typist", range: "< 400 WPM" },
+        { label: "Keyboard-Demigod", range: "< 1.000 WPM" },
+        { label: "Quantum Finger", range: "< 5.000 WPM" },
+        { label: "Typo Singularity", range: "< 10.000 WPM" },
+        { label: "Omega Being", range: "< 100.000 WPM" },
+        { label: "The Final Key", range: "≥ 100.000 WPM" },
+      ];
+    }
+
+    /*
+      ================================================================================
+      Textgenerator
+      ================================================================================
+    */
+    function generateText(limit = 40){
+      limit = clamp(Number(limit)||40, 1, 40);
+      let text = "";
+      while(text.length < limit){
+        const wordLen = 2 + Math.floor(Math.random()*6); // 2-7
+        let word = "";
+        for(let i=0;i<wordLen;i++){
+          word += String.fromCharCode(97 + Math.floor(Math.random()*26));
+        }
+        const candidate = (text.length ? " " : "") + word;
+        if(text.length + candidate.length > limit) break;
+        text += candidate;
+      }
+      return text;
+    }
+
+    /*
+      ================================================================================
+      TypingSession
+      - WPM & Coins werden durch den Multiplikator beeinflusst
+      ================================================================================
+    */
+    class TypingSession{
+      constructor(target){
+        this.target = target;
+        this.spans = [];
+        this.index = 0;
+        this.typedStatuses = new Array(this.target.length).fill(null); // null/true/false
+        this.correctCount = 0;
+        this.typedCount = 0;
+        this.startTime = null;
+        this.timerInterval = null;
+        this.coinsEarned = 0; // Session-Coins (inkl. multiplier)
+        this.initUI();
+        this.attachEvents();
+      }
+
+      initUI(){
+        const display = document.getElementById('display');
+        display.innerHTML = '';
+        this.spans = [];
+        for(let i=0;i<this.target.length;i++){
+          const ch = this.target[i];
+          const span = document.createElement('span');
+          span.className = 'char';
+          span.textContent = ch;
+          display.appendChild(span);
+          this.spans.push(span);
+        }
+        this.index = 0;
+        if(this.spans.length){ this.spans[0].classList.add('current'); }
+        document.getElementById('wpm').textContent = '0';
+        document.getElementById('acc').textContent = '100%';
+        document.getElementById('time').textContent = '0s';
+        const stats = loadStats();
+        document.getElementById('coins').textContent = formatNumber(stats.coins);
+        document.getElementById('level').textContent = '—';
+        display.focus();
+      }
+
+      attachEvents(){
+        this.keyHandler = (e)=>this.onKey(e);
+        document.addEventListener('keydown', this.keyHandler);
+        this.pasteHandler = (e)=>e.preventDefault();
+        document.getElementById('display').addEventListener('paste', this.pasteHandler);
+      }
+
+      detachEvents(){
+        document.removeEventListener('keydown', this.keyHandler);
+        document.getElementById('display').removeEventListener('paste', this.pasteHandler);
+        if(this.timerInterval){ clearInterval(this.timerInterval); this.timerInterval = null; }
+      }
+
+      onKey(e){
+        if(e.key === 'Backspace'){
+          e.preventDefault();
+          if(this.index === 0) return;
+          const prev = this.index - 1;
+          if(this.typedStatuses[prev] !== null){
+            this.typedCount--;
+            if(this.typedStatuses[prev] === true) this.correctCount--;
+          }
+          this.typedStatuses[prev] = null;
+          this.spans[prev]?.classList.remove('correct','incorrect');
+          this.spans[this.index]?.classList.remove('current');
+          this.index = prev;
+          this.spans[this.index]?.classList.add('current');
+          this.updateStats();
+          return;
+        }
+
+        if(typeof e.key !== 'string' || e.key.length !== 1) return;
+        e.preventDefault();
+
+        if(this.startTime === null){
+          this.startTime = Date.now();
+          this.timerInterval = setInterval(()=>this.updateStats(), 200);
+        }
+
+        if(this.index >= this.target.length) return;
+        const expected = this.target[this.index];
+        const typed = e.key;
+
+        if(this.typedStatuses[this.index] === null){
+          this.typedCount++;
+        }
+
+        if(typed === expected){
+          this.typedStatuses[this.index] = true;
+          this.correctCount++;
+          this.spans[this.index]?.classList.add('correct');
+        }else{
+          this.typedStatuses[this.index] = false;
+          this.spans[this.index]?.classList.add('incorrect');
+        }
+
+        this.spans[this.index]?.classList.remove('current');
+        this.index++;
+        if(this.index < this.spans.length){
+          this.spans[this.index]?.classList.add('current');
+        }else{
+          this.finish();
+        }
+
+        this.updateStats();
+      }
+
+      updateStats(){
+        const secs = this.startTime ? Math.floor((Date.now() - this.startTime)/1000) : 0;
+        const minutes = Math.max(0.001, secs/60);
+        
+        const stats = loadStats();
+        const multiplier = stats.multiplier || 1;
+        
+        // WPM mit Multiplikator
+        const wpm = Math.round(((this.correctCount / 5) / minutes) * multiplier);
+        const acc = this.typedCount > 0 ? Math.round((this.correctCount / this.typedCount) * 100) : 100;
+        
+        // Coins mit Multiplikator
+        this.coinsEarned = this.correctCount * multiplier;
+
+        document.getElementById('wpm').textContent = String(wpm);
+        document.getElementById('acc').textContent = acc + '%';
+        document.getElementById('time').textContent = secs + 's';
+        document.getElementById('coins').textContent = formatNumber(stats.coins + this.coinsEarned);
+        document.getElementById('level').textContent = getLevel(wpm);
+      }
+
+      finish(){
+        this.detachEvents();
+
+        const secs = this.startTime ? Math.max(1, Math.floor((Date.now() - this.startTime)/1000)) : 0;
+        const minutes = Math.max(0.001, secs/60);
+        
+        const stats = loadStats();
+        const multiplier = stats.multiplier || 1;
+
+        const wpm = Math.round(((this.correctCount / 5) / minutes) * multiplier);
+        const acc = this.typedCount > 0 ? Math.round((this.correctCount / this.typedCount) * 100) : 100;
+        this.coinsEarned = this.correctCount * multiplier;
+
+        stats.coins += this.coinsEarned;
+        stats.sessions.push({
+          date: new Date().toISOString(),
+          wpm, acc, secs, coins: this.coinsEarned, level: getLevel(wpm)
+        });
+        saveStats(stats);
+
+        showModal(
+          "Session beendet",
+          `
+            <p class="mono">WPM: <strong>${wpm}</strong> &nbsp;•&nbsp; Accuracy: <strong>${acc}%</strong> &nbsp;•&nbsp; Zeit: <strong>${secs}s</strong></p>
+            <p>Coins verdient: <span class="badge">+${formatNumber(this.coinsEarned)}</span> (aktueller Multiplikator: x${stats.multiplier})</p>
+            <p>Dein Level: <strong>${getLevel(wpm)}</strong></p>
+          `
+        );
+      }
+    }
+
+    /*
+      ================================================================================
+      Modal Helfer
+      ================================================================================
+    */
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalTitle    = document.getElementById('modalTitle');
+    const modalContent  = document.getElementById('modalContent');
+    const modalCloseBtn = document.getElementById('modalClose');
+
+    function showModal(title, html){
+      modalTitle.textContent = title;
+      modalContent.innerHTML = html;
+      modalBackdrop.style.display = 'flex';
+      modalBackdrop.setAttribute('aria-hidden','false');
+    }
+    function hideModal(){
+      modalBackdrop.style.display = 'none';
+      modalBackdrop.setAttribute('aria-hidden','true');
+    }
+    modalCloseBtn.addEventListener('click', hideModal);
+    modalBackdrop.addEventListener('click', (e)=>{
+      if(e.target === modalBackdrop) hideModal();
+    });
+    document.addEventListener('keydown', (e)=>{
+      if(e.key === 'Escape' && modalBackdrop.style.display === 'flex') hideModal();
+    });
+
+    /*
+      ================================================================================
+      Buttons: Start / Stop / Scores / Levels / Shop / Reset / Download
+      ================================================================================
+    */
+    const startBtn = document.getElementById('start');
+    const stopBtn  = document.getElementById('stop');
+    const lenInput = document.getElementById('len');
+
+    startBtn.addEventListener('click', ()=>{
+      if (window.currentSession) {
+        window.currentSession.detachEvents();
+      }
+      const len = clamp(Number(lenInput.value)||40, 10, 40);
+      lenInput.value = String(len);
+      const text = generateText(len);
+      window.currentSession = new TypingSession(text);
+    });
+
+    stopBtn.addEventListener('click', ()=>{
+      if(window.currentSession){
+        window.currentSession.finish();
+      }
+    });
+
+    // Alle Scores
+    document.getElementById('showScores').addEventListener('click', ()=>{
+      const stats = loadStats();
+      if(!stats.sessions.length){
+        showModal("Alle Scores", `<p>Noch keine Sessions vorhanden.</p>`);
+        return;
+      }
+      const rows = stats.sessions.map((s,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td><span class="mono">${new Date(s.date).toLocaleString('de-DE')}</span></td>
+          <td>${s.wpm}</td>
+          <td>${s.acc}%</td>
+          <td>${s.secs}s</td>
+          <td>+${formatNumber(s.coins)}</td>
+          <td><span class="badge">${s.level}</span></td>
+        </tr>
+      `).reverse().join("");
+
+      const listItems = getAllLevels().map(l => {
+          if (l.isHeader) {
+            return `<li style="list-style-type:none; font-weight:bold; ${l.style || ''}">${l.level}</li>`;
+          }
+          return `<li><strong>${l.label}</strong> — ${l.range}</li>`;
+        }).join("");
+
+      const html = `
+        <p>Gesamt-Coins: <strong>${formatNumber(stats.coins)}</strong> &nbsp;•&nbsp; Aktueller Multiplikator: <strong>x${stats.multiplier}</strong></p>
+        <div style="overflow:auto;">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Datum</th>
+                <th>WPM</th>
+                <th>Accuracy</th>
+                <th>Zeit</th>
+                <th>Coins</th>
+                <th>Level</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <hr style="border:none;border-top:1px solid #eee;margin:12px 0;">
+        <details>
+          <summary>Level-Legende anzeigen</summary>
+          <ul style="padding-left: 20px;">${listItems}</ul>
+        </details>
+      `;
+      showModal("Alle Scores", html);
+    });
+
+    // Level-Liste
+    document.getElementById('showLevels').addEventListener('click', ()=>{
+      const list = getAllLevels().map(l => {
+          if (l.isHeader) {
+            return `<li style="list-style-type:none; font-weight:bold; ${l.style || ''}">${l.level}</li>`;
+          }
+          return `<li><strong>${l.label}</strong> — ${l.range}</li>`;
+        }).join("");
+      showModal("Level-Liste", `<ul style="padding-left: 20px;">${list}</ul>`);
+    });
+
+    // Coin-Shop inkl. x1000 (10x teurer als x100)
+    document.getElementById('shop').addEventListener('click', ()=>{
+      const stats = loadStats();
+      const shopItems = [
+        { id: 'buyX2', mult: 2, price: 500 },
+        { id: 'buyX3', mult: 3, price: 2000 },
+        { id: 'buyX4', mult: 4, price: 5000 },
+        { id: 'buyX5', mult: 5, price: 15000 },
+        { id: 'buyX10', mult: 10, price: 100000 },
+        { id: 'buyX100', mult: 100, price: 1000000 },
+        { id: 'buyX1000', mult: 1000, price: 10000000 }, // NEU
+      ];
+      
+      const buttonsHtml = shopItems.map(item => 
+        `<button id="${item.id}" ${stats.coins < item.price ? 'disabled' : ''}>Kaufe x${item.mult} (${formatNumber(item.price)} Coins)</button>`
+      ).join('');
+
+      const html = `
+        <p>Coins: <strong>${formatNumber(stats.coins)}</strong> &nbsp;•&nbsp; Aktueller Multiplikator: <strong>x${stats.multiplier}</strong></p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          ${buttonsHtml}
+          <button id="resetMul" class="btn-ghost">Multiplikator zurücksetzen</button>
+        </div>
+        <p class="small" style="margin-top:8px;">Der Multiplikator beeinflusst WPM und Coins in neuen Sessions (Coins = korrekte Zeichen × Multiplikator).</p>
+      `;
+      showModal("Coin-Shop", html);
+
+      // Buttons erst NACH dem Rendern anbinden
+      setTimeout(()=>{
+        shopItems.forEach(item => {
+          document.getElementById(item.id)?.addEventListener('click', () => {
+            const s = loadStats();
+            if ((s.coins || 0) >= item.price) {
+              s.coins -= item.price;
+              s.multiplier = item.mult;
+              saveStats(s);
+              document.getElementById('coins').textContent = formatNumber(s.coins);
+              document.getElementById('multiplierDisplay').textContent = `x${s.multiplier}`;
+              showModal("Kauf erfolgreich", `<p>Gekauft: <strong>x${s.multiplier}</strong>. Neuer Stand: ${formatNumber(s.coins)} Coins.</p>`);
+            } else {
+              showModal("Fehler", `<p>Nicht genug Coins für x${item.mult} (benötigt ${formatNumber(item.price)}).</p>`);
+            }
+          });
+        });
+        
+        document.getElementById('resetMul')?.addEventListener('click', ()=>{
+          const s = loadStats();
+          s.multiplier = 1; 
+          saveStats(s);
+          document.getElementById('multiplierDisplay').textContent = `x1`;
+          showModal("Coin-Shop", `<p>Multiplikator zurückgesetzt auf <strong>x1</strong>.</p>`);
+        });
+      }, 0);
+    });
+
+
+    // Stats löschen
+    document.getElementById('resetStats').addEventListener('click', ()=>{
+      if(confirm('Alle lokal gespeicherten Statistiken wirklich löschen?')){
+        localStorage.removeItem(STORAGE_KEY);
+        // UI reset
+        document.getElementById('coins').textContent = '0';
+        document.getElementById('wpm').textContent = '0';
+        document.getElementById('acc').textContent = '100%';
+        document.getElementById('time').textContent = '0s';
+        document.getElementById('level').textContent = '—';
+        document.getElementById('multiplierDisplay').textContent = 'x1';
+        document.getElementById('display').innerHTML = '';
+        if (window.currentSession) {
+          window.currentSession.detachEvents();
+          window.currentSession = null;
+        }
+        showModal("Zurückgesetzt", "<p>Statistiken und Einstellungen wurden gelöscht.</p>");
+      }
+    });
+
+    // Bericht als JSON
+    document.getElementById('downloadReport').addEventListener('click', ()=>{
+      const data = loadStats();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'typing_stats.json';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+    
+    // Initialen Coin-Stand und Multiplikator laden und anzeigen
+    window.addEventListener('load', ()=>{
+        const stats = loadStats();
+        document.getElementById('coins').textContent = formatNumber(stats.coins);
+        document.getElementById('multiplierDisplay').textContent = `x${stats.multiplier || 1}`;
+        document.getElementById('display')?.focus();
+    });
+  </script>
+</body>
+</html>
